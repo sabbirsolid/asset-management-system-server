@@ -35,6 +35,30 @@ async function run() {
     );
 
     const userCollection = client.db("assetManagementDB").collection("users");
+
+    app.get('/users/roles/:email', async (req, res) => {
+      const email = req.params.email;
+      console.log(email);
+      const query = { email: email };
+    
+      try {
+        const user = await userCollection.findOne(query);
+    
+        if (user) {
+          const isHR = user.role === 'HRManager';
+          const isEmployee = user.role === 'employee';
+    
+          return res.send({ isHR, isEmployee, user });
+        }
+    
+        res.send({ isHR: false, isEmployee: false, user: null });
+      } catch (error) {
+        console.error('Error fetching user roles:', error);
+        res.status(500).send({ error: 'Internal Server Error' });
+      }
+    });
+    
+    
     // posting data to database
     app.post("/users", async (req, res) => {
       const query = { email: req.body.email };
