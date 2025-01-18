@@ -207,6 +207,77 @@ async function run() {
       }
     });
 
+    // admin faces
+
+    app.get("/allRequests", verifyToken, verifyHR, async (req, res) => {
+      try {
+        const { search } = req.query;
+        const query = {};
+
+        if (search) {
+          query.$or = [
+            { requesterName: { $regex: search, $options: "i" } },
+            { requesterEmail: { $regex: search, $options: "i" } },
+          ];
+        }
+
+        const result = await requestCollection.find(query).toArray();
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching requests:", error);
+        res.status(500).send({ error: "Failed to fetch requests" });
+      }
+    });
+
+    // Approve a request
+    app.patch("/requests/approve/:id", async (req, res) => {
+      const query = { _id: new ObjectId(req.params.id) };
+      const updateDoc = {
+        $set: {
+          status: "approved",
+          approvalDate: new Date(),
+        },
+      };
+      const result = await requestCollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
+
+    // Reject a request
+    app.patch("/requests/reject/:id", async (req, res) => {
+      const query = { _id: new ObjectId(req.params.id) };
+      const updateDoc = {
+        $set: {
+          status: "rejected",
+          rejectedDate: new Date(),
+        },
+      };
+      const result = await requestCollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
+    app.patch("/hrProfile/:email", verifyToken, verifyHR, async (req, res) => {
+      const query = { email: req.params.email };
+      const updateDoc = {
+        $set: {
+          name: req.body.name
+        },
+      };
+      const result = await userCollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
+
+    // employee profile update
+    app.patch("/employeeProfile/:email", verifyToken, async (req, res) => {
+      const query = { email: req.params.email };
+
+      const updateDoc = {
+        $set: {
+          name: req.body.name
+        },
+      };
+      const result = await userCollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
+
     //all simple requests without filter
     app.get("/requests", verifyToken, async (req, res) => {
       const result = await requestCollection.find().toArray();
