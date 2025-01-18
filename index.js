@@ -2,7 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -36,6 +36,9 @@ async function run() {
     );
     const userCollection = client.db("assetManagementDB").collection("users");
     const assetCollection = client.db("assetManagementDB").collection("assets");
+    const requestCollection = client
+      .db("assetManagementDB")
+      .collection("requests");
     // jwt api
     app.post("/jwt", async (req, res) => {
       const user = req.body;
@@ -93,7 +96,45 @@ async function run() {
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
+    app.get("/assets", async (req, res) => {
+      try {
+        const {
+          search = "",
+          sortField = "name",
+          sortOrder = "asc",
+          stockStatus,
+          assetType,
+        } = req.query;
 
+        const filter = {};
+
+        // Search by name
+        if (search) {
+          filter.name = { $regex: search, $options: "i" }; // Case-insensitive search
+        }
+
+        // Filter by stock status
+        if (stockStatus) {
+          filter.quantity =
+            stockStatus === "available" ? { $gt: 0 } : { $eq: 0 };
+        }
+
+        // Filter by asset type
+        if (assetType) {
+          filter.type = assetType;
+        }
+
+        // Sorting
+        const sort = { [sortField]: sortOrder === "asc" ? 1 : -1 };
+
+        // Fetch filtered and sorted data
+        const result = await assetCollection.find(filter).sort(sort).toArray();
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching assets:", error);
+        res.status(500).send({ error: "Failed to fetch assets" });
+      }
+    });
     // posting data to database
     app.post("/users", async (req, res) => {
       const query = { email: req.body.email };
@@ -104,40 +145,6 @@ async function run() {
       const result = await userCollection.insertOne(req.body);
       res.send(result);
     });
-    app.get('/assets', async (req, res) => {
-      try {
-        const { search = "", sortField = "name", sortOrder = "asc", stockStatus, assetType } = req.query;
-    
-        const filter = {};
-    
-        // Search by name
-        if (search) {
-          filter.name = { $regex: search, $options: "i" }; // Case-insensitive search
-        }
-    
-        // Filter by stock status
-        if (stockStatus) {
-          filter.quantity =
-            stockStatus === "available" ? { $gt: 0 } : { $eq: 0 };
-        }
-    
-        // Filter by asset type
-        if (assetType) {
-          filter.type = assetType;
-        }
-    
-        // Sorting
-        const sort = { [sortField]: sortOrder === "asc" ? 1 : -1 };
-    
-        // Fetch filtered and sorted data
-        const result = await assetCollection.find(filter).sort(sort).toArray();
-        res.send(result);
-      } catch (error) {
-        console.error("Error fetching assets:", error);
-        res.status(500).send({ error: "Failed to fetch assets" });
-      }
-    });
-    
 
     app.patch("/assets", verifyToken, verifyHR, async (req, res) => {
       try {
@@ -158,7 +165,11 @@ async function run() {
             .send({ error: "Quantity must be a valid number." });
         }
         const updateDoc = {
-          $set: { type: req.body.type, quantity: newQuantity },
+          $set: {
+            type: req.body.type,
+            quantity: newQuantity,
+            addedDate: new Date(),
+          },
         };
         const result = await assetCollection.updateOne(
           filter,
@@ -170,6 +181,68 @@ async function run() {
         console.error("Error updating asset:", error);
         res.status(500).send({ error: "Failed to update the asset." });
       }
+    });
+
+    app.post("/requests", verifyToken, async (req, res) => {
+      const { name, requestedQuantity } = req.body;
+      const query = { name: name };
+
+      try {
+        const asset = await assetCollection.findOne(query);
+
+        if (!asset) {
+          return res.status(404).json({ error: "Asset not found" });
+        }
+
+        if (asset.quantity < requestedQuantity) {
+          return res
+            .status(400)
+            .json({ error: "Insufficient quantity available" });
+        }
+
+        const result = await requestCollection.insertOne(req.body);
+        res.send(result);
+      } catch (err) {
+        res.status(500).json({ error: "Failed to handle the request" });
+      }
+    });
+
+    //all simple requests without filter
+    app.get("/requests", verifyToken, async (req, res) => {
+      const result = await requestCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.get("/filteredRequests", async (req, res) => {
+      try {
+        const { search, requestStatus, assetType } = req.query;
+        const query = {};
+
+        if (search) {
+          query.name = { $regex: search, $options: "i" };
+        }
+
+        if (requestStatus) {
+          query.status = requestStatus;
+        }
+
+        if (assetType) {
+          query.type = assetType;
+        }
+
+        const results = await requestCollection.find(query).toArray();
+
+        res.status(200).send(results);
+      } catch (error) {
+        console.error("Error fetching filtered requests:", error);
+        res.status(500).send({ error: "Failed to fetch filtered requests." });
+      }
+    });
+
+    app.delete("/requests/:id", async (req, res) => {
+      const query = { _id: new ObjectId(req.params.id) };
+      const result = await requestCollection.deleteOne(query);
+      res.send(result);
     });
   } finally {
     // Ensures that the client will close when you finish/error
