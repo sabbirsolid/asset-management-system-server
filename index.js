@@ -78,6 +78,32 @@ async function run() {
       }
       next();
     };
+    // get all unemployed users
+    app.get("/users/:email", async (req, res) => {
+      // console.log(req.params.email);
+      const unemployedUsers = await userCollection
+        .find({ company: null, role: "employee" })
+        .toArray();
+      const hrInfo = await userCollection.findOne({ email: req.params.email });
+      const hrMembers = await userCollection.find({hrEmail: req.params.email}).toArray();
+      console.log(hrMembers);
+      res.send({ unemployedUsers, hrInfo , hrMembers});
+    });
+
+    // updating employee
+    app.patch("/users", async (req, res) => {
+      const { id, hrEmail, company } = req.body;
+      console.log(id, hrEmail, company);
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          hrEmail: hrEmail,
+          company: company,
+        },
+      };
+      const employee = await userCollection.updateOne(query, updateDoc);
+      res.send(employee);
+    });
 
     app.get("/users/roles/:email", async (req, res) => {
       const email = req.params.email;
@@ -342,14 +368,14 @@ async function run() {
     // testing
     app.post("/create-payment-intent", async (req, res) => {
       const { price } = req.body;
-    console.log(price);
+      console.log(price);
       if (!price || isNaN(price)) {
         return res.status(400).send({ error: "Invalid price value." });
       }
-    
+
       const amount = parseInt(price * 100); // Convert to cents
       console.log("Price:", price, "Amount:", amount);
-    
+
       try {
         const paymentIntent = await stripe.paymentIntents.create({
           amount: amount,
@@ -362,7 +388,6 @@ async function run() {
         res.status(500).send({ error: error.message });
       }
     });
-    
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
