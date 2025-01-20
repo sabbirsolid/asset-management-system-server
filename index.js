@@ -85,8 +85,8 @@ async function run() {
         .find({ company: null, role: "employee" })
         .toArray();
       const hrInfo = await userCollection.findOne({ email: req.params.email });
+      console.log(hrInfo);
       const hrMembers = await userCollection.find({hrEmail: req.params.email}).toArray();
-      console.log(hrMembers);
       res.send({ unemployedUsers, hrInfo , hrMembers});
     });
 
@@ -175,6 +175,17 @@ async function run() {
       const result = await userCollection.insertOne(req.body);
       res.send(result);
     });
+    // update user limit
+    app.patch('/users/:email', async(req, res) =>{
+    const email = req.params.email;
+    const query = {email: email}
+    const newMember = parseInt(req.body.newMember)
+    const updateDoc = {
+      $inc:{employeeCount: newMember}
+    }
+    const result = await userCollection.updateOne(query,updateDoc)
+    res.send(result);
+    })
 
     app.patch("/assets", verifyToken, verifyHR, async (req, res) => {
       try {
