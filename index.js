@@ -99,7 +99,7 @@ async function run() {
         $set: {
           hrEmail: hrEmail,
           company: company,
-          companyLogo: companyLogo
+          companyLogo: companyLogo,
         },
       };
       const employee = await userCollection.updateOne(query, updateDoc);
@@ -107,7 +107,7 @@ async function run() {
     });
     // removing employee
     app.patch("/usersRemove/:id", async (req, res) => {
-      const  id = req.params;
+      const id = req.params;
       const query = { _id: new ObjectId(id) };
       const updateDoc = {
         $set: {
@@ -119,13 +119,19 @@ async function run() {
       const employee = await userCollection.updateOne(query, updateDoc);
       res.send(employee);
     });
-    // getting an employee team 
-    app.get('/usersTeam/:email', async(req, res) =>{
-      const query = {email: req.params.email}
+    // getting an employee team
+    app.get("/usersTeam/:email", async (req, res) => {
+      const query = { email: req.params.email };
       const userInfo = await userCollection.findOne(query);
-      const team = await userCollection.find({hrEmail: userInfo.hrEmail}).toArray();
-      res.send(team);
-    })
+      if (userInfo?.hrEmail) {
+        const team = await userCollection
+          .find({ hrEmail: userInfo.hrEmail })
+          .toArray();
+        res.send(team);
+      } else {
+        res.send([]);
+      }
+    });
 
     app.get("/users/roles/:email", async (req, res) => {
       const email = req.params.email;
@@ -148,7 +154,9 @@ async function run() {
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
-    app.get("/assets", async (req, res) => {
+    // testing
+
+    app.get("/assets", verifyToken, async (req, res) => {
       try {
         const {
           search = "",
@@ -156,37 +164,145 @@ async function run() {
           sortOrder = "asc",
           stockStatus,
           assetType,
+          email,
         } = req.query;
 
-        const filter = {};
+        // Find user info based on email
+        const userInfo = await userCollection.findOne({ email: email });
+        if (userInfo?.hrEmail) {
+          const filter = {
+            hrEmail: userInfo.hrEmail,
+          };
 
-        // Search by name
-        if (search) {
-          filter.name = { $regex: search, $options: "i" }; // Case-insensitive search
+          // Search by name
+          if (search) {
+            filter.name = { $regex: search, $options: "i" }; // Case-insensitive search
+          }
+
+          // Filter by stock status
+          if (stockStatus) {
+            filter.quantity =
+              stockStatus === "available" ? { $gt: 0 } : { $eq: 0 };
+          }
+
+          // Filter by asset type
+          if (assetType) {
+            filter.type = assetType;
+          }
+
+          // Sorting
+          const sort = { [sortField]: sortOrder === "asc" ? 1 : -1 };
+
+          // Fetch filtered and sorted data
+          const result = await assetCollection
+            .find(filter)
+            .sort(sort)
+            .toArray();
+          return res.send(result);
         }
 
-        // Filter by stock status
-        if (stockStatus) {
-          filter.quantity =
-            stockStatus === "available" ? { $gt: 0 } : { $eq: 0 };
-        }
-
-        // Filter by asset type
-        if (assetType) {
-          filter.type = assetType;
-        }
-
-        // Sorting
-        const sort = { [sortField]: sortOrder === "asc" ? 1 : -1 };
-
-        // Fetch filtered and sorted data
-        const result = await assetCollection.find(filter).sort(sort).toArray();
-        res.send(result);
+        // If no hrEmail match, send an empty response
+        res.send([]);
       } catch (error) {
         console.error("Error fetching assets:", error);
         res.status(500).send({ error: "Failed to fetch assets" });
       }
     });
+    // asset for specific hr
+    app.get("/assetsHR", verifyToken, verifyHR, async (req, res) => {
+      try {
+        const {
+          search = "",
+          sortField = "name",
+          sortOrder = "asc",
+          stockStatus,
+          assetType,
+          email,
+        } = req.query;
+        // Find user info based on email
+        if (email) {
+          const filter = {
+            hrEmail: email,
+          };
+
+          // Search by name
+          if (search) {
+            filter.name = { $regex: search, $options: "i" }; // Case-insensitive search
+          }
+
+          // Filter by stock status
+          if (stockStatus) {
+            filter.quantity =
+              stockStatus === "available" ? { $gt: 0 } : { $eq: 0 };
+          }
+
+          // Filter by asset type
+          if (assetType) {
+            filter.type = assetType;
+          }
+
+          // Sorting
+          const sort = { [sortField]: sortOrder === "asc" ? 1 : -1 };
+
+          // Fetch filtered and sorted data
+          const result = await assetCollection
+            .find(filter)
+            .sort(sort)
+            .toArray();
+          return res.send(result);
+        }
+
+        // If no hrEmail match, send an empty response
+        res.send([]);
+      } catch (error) {
+        console.error("Error fetching assets:", error);
+        res.status(500).send({ error: "Failed to fetch assets" });
+      }
+    });
+
+    //     app.get("/assets",verifyToken, async (req, res) => {
+    //       try {
+    //         const {
+    //           search = "",
+    //           sortField = "name",
+    //           sortOrder = "asc",
+    //           stockStatus,
+    //           assetType,
+    //           email
+    //         } = req.query;
+    // const userInfo = await userCollection.findOne({email: email})
+    // if(userInfo?.hrEmail){
+
+    // }
+    //         const filter = {};
+
+    //         // Search by name
+    //         if (search) {
+    //           filter.name = { $regex: search, $options: "i" }; // Case-insensitive search
+    //         }
+
+    //         // Filter by stock status
+    //         if (stockStatus) {
+    //           filter.quantity =
+    //             stockStatus === "available" ? { $gt: 0 } : { $eq: 0 };
+    //         }
+
+    //         // Filter by asset type
+    //         if (assetType) {
+    //           filter.type = assetType;
+    //         }
+
+    //         // Sorting
+    //         const sort = { [sortField]: sortOrder === "asc" ? 1 : -1 };
+
+    //         // Fetch filtered and sorted data
+    //         const result = await assetCollection.find(filter).sort(sort).toArray();
+    //         res.send(result);
+    //       } catch (error) {
+    //         console.error("Error fetching assets:", error);
+    //         res.status(500).send({ error: "Failed to fetch assets" });
+    //       }
+    //     });
     // posting data to database
     app.post("/users", async (req, res) => {
       const query = { email: req.body.email };
@@ -232,6 +348,8 @@ async function run() {
             type: req.body.type,
             quantity: newQuantity,
             addedDate: new Date(),
+            hrEmail: req.body.hrEmail,
+            company: req.body.company,
           },
         };
         const result = await assetCollection.updateOne(
@@ -244,6 +362,32 @@ async function run() {
         console.error("Error updating asset:", error);
         res.status(500).send({ error: "Failed to update the asset." });
       }
+    });
+
+    // decreasing assets quantity
+    app.patch("/assetDecrease",verifyToken, verifyHR, async(req, res) =>{
+      const {assetId, requestedQuantity} = req.body;
+      const filter = {_id: new ObjectId(assetId)}
+      const updateDoc ={
+        $inc: {
+          quantity: -parseInt(requestedQuantity)
+        }
+      }
+      const result = await assetCollection.updateOne(filter, updateDoc)
+      res.send(result);
+    });
+    
+    // increase assets quantity implementing return function
+    app.patch("/assetIncrease",verifyToken, async(req, res) =>{
+      const {assetId, requestedQuantity} = req.body;
+      const filter = {_id: new ObjectId(assetId)}
+      const updateDoc ={
+        $inc: {
+          quantity: -parseInt(requestedQuantity)
+        }
+      }
+      const result = await assetCollection.updateOne(filter, updateDoc)
+      res.send(result);
     });
 
     app.post("/requests", verifyToken, async (req, res) => {
