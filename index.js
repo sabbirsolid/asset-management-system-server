@@ -365,28 +365,41 @@ async function run() {
     });
 
     // decreasing assets quantity
-    app.patch("/assetDecrease",verifyToken, verifyHR, async(req, res) =>{
-      const {assetId, requestedQuantity} = req.body;
-      const filter = {_id: new ObjectId(assetId)}
-      const updateDoc ={
+    app.patch("/assetDecrease", verifyToken, verifyHR, async (req, res) => {
+      const { assetId, requestedQuantity } = req.body;
+      const filter = { _id: new ObjectId(assetId) };
+      const updateDoc = {
         $inc: {
-          quantity: -parseInt(requestedQuantity)
-        }
-      }
-      const result = await assetCollection.updateOne(filter, updateDoc)
+          quantity: -parseInt(requestedQuantity),
+        },
+      };
+      const result = await assetCollection.updateOne(filter, updateDoc);
       res.send(result);
     });
-    
+
     // increase assets quantity implementing return function
-    app.patch("/assetIncrease",verifyToken, async(req, res) =>{
-      const {assetId, requestedQuantity} = req.body;
-      const filter = {_id: new ObjectId(assetId)}
-      const updateDoc ={
+    app.patch("/assetReturn", verifyToken, async (req, res) => {
+      const { assetId, requestedQuantity } = req.body;
+      const filter = { _id: new ObjectId(assetId) };
+      const updateDoc = {
         $inc: {
-          quantity: -parseInt(requestedQuantity)
-        }
-      }
-      const result = await assetCollection.updateOne(filter, updateDoc)
+          quantity: parseInt(requestedQuantity),
+        },
+      };
+      const result = await assetCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
+
+    // request returned
+    app.patch("/requestReturned", verifyToken, async (req, res) => {
+      const { requestId } = req.body;
+      const filter = { _id: new ObjectId(requestId) };
+      const updateDoc = {
+        $set: {
+          status: "returned",
+        },
+      };
+      const result = await requestCollection.updateOne(filter, updateDoc);
       res.send(result);
     });
 
