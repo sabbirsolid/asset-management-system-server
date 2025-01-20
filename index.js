@@ -80,30 +80,52 @@ async function run() {
     };
     // get all unemployed users
     app.get("/users/:email", async (req, res) => {
-      // console.log(req.params.email);
+      console.log(req.params.email);
       const unemployedUsers = await userCollection
         .find({ company: null, role: "employee" })
         .toArray();
       const hrInfo = await userCollection.findOne({ email: req.params.email });
-      console.log(hrInfo);
-      const hrMembers = await userCollection.find({hrEmail: req.params.email}).toArray();
-      res.send({ unemployedUsers, hrInfo , hrMembers});
+      const hrMembers = await userCollection
+        .find({ hrEmail: req.params.email })
+        .toArray();
+      res.send({ unemployedUsers, hrInfo, hrMembers });
     });
 
-    // updating employee
-    app.patch("/users", async (req, res) => {
-      const { id, hrEmail, company } = req.body;
-      console.log(id, hrEmail, company);
+    // adding employee
+    app.patch("/usersAdd", async (req, res) => {
+      const { id, hrEmail, company, companyLogo } = req.body;
       const query = { _id: new ObjectId(id) };
       const updateDoc = {
         $set: {
           hrEmail: hrEmail,
           company: company,
+          companyLogo: companyLogo
         },
       };
       const employee = await userCollection.updateOne(query, updateDoc);
       res.send(employee);
     });
+    // removing employee
+    app.patch("/usersRemove/:id", async (req, res) => {
+      const  id = req.params;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          hrEmail: null,
+          company: null,
+          companyLogo: null,
+        },
+      };
+      const employee = await userCollection.updateOne(query, updateDoc);
+      res.send(employee);
+    });
+    // getting an employee team 
+    app.get('/usersTeam/:email', async(req, res) =>{
+      const query = {email: req.params.email}
+      const userInfo = await userCollection.findOne(query);
+      const team = await userCollection.find({hrEmail: userInfo.hrEmail}).toArray();
+      res.send(team);
+    })
 
     app.get("/users/roles/:email", async (req, res) => {
       const email = req.params.email;
@@ -176,16 +198,16 @@ async function run() {
       res.send(result);
     });
     // update user limit
-    app.patch('/users/:email', async(req, res) =>{
-    const email = req.params.email;
-    const query = {email: email}
-    const newMember = parseInt(req.body.newMember)
-    const updateDoc = {
-      $inc:{employeeCount: newMember}
-    }
-    const result = await userCollection.updateOne(query,updateDoc)
-    res.send(result);
-    })
+    app.patch("/users/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const newMember = parseInt(req.body.newMember);
+      const updateDoc = {
+        $inc: { employeeCount: newMember },
+      };
+      const result = await userCollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
 
     app.patch("/assets", verifyToken, verifyHR, async (req, res) => {
       try {
