@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
+const moment = require("moment");
 const stripe = require("stripe")(process.env.STRIPE_SECURITY_KEY);
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
@@ -132,7 +133,7 @@ async function run() {
         res.send([]);
       }
     });
-
+    // getting user roles
     app.get("/users/roles/:email", async (req, res) => {
       const email = req.params.email;
       // console.log(email);
@@ -155,7 +156,6 @@ async function run() {
       }
     });
     // testing
-
     app.get("/assets", verifyToken, async (req, res) => {
       try {
         const {
@@ -260,7 +260,23 @@ async function run() {
       }
     });
 
-    //     app.get("/assets",verifyToken, async (req, res) => {
+    // getting low stock asset by specific hr
+    app.get("/assetLowStock", verifyToken, verifyHR, async (req, res) => {
+      try {
+        const { email } = req.query;
+        const query = {
+          hrEmail: email,
+          quantity: { $lt: 10 },
+        };
+        const result = await assetCollection.find(query).limit(10).toArray();
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching low stock assets:", error);
+        res.status(500).send("Error fetching low stock assets");
+      }
+    });
+
+    //app.get("/assets",verifyToken, async (req, res) => {
     //       try {
     //         const {
     //           search = "",
@@ -390,12 +406,31 @@ async function run() {
       res.send(result);
     });
 
-    // hr pending returns
-    // app.get("/pendingRequestsHR", verifyToken, verifyHR, async (req, res) => {
-    //   const query = {hrEmail: req.query.email, status: "pending" };
-    //   const result = await requestCollection.find(query).toArray();
-    //   res.send(result);
-    // });
+    // hr: update an asset
+    app.patch("/assetUpdate/:id", verifyToken, async (req, res) => {
+      const { id } = req.params;
+      const updatedData = req.body;
+      const result = await assetCollection.updateOne(
+        { _id: new ObjectId(id) },
+        {
+          $set: {
+            name: updatedData.name,
+            quantity: updatedData.quantity,
+            type: updatedData.type,
+          },
+        }
+      );
+      res.send(result);
+    });
+
+    // hr: asset delete
+    app.delete("/assetDelete/:id", verifyToken, verifyHR, async (req, res) => {
+      const result = await assetCollection.deleteOne({
+        _id: new ObjectId(req.params.id),
+      });
+      res.send(result);
+    });
+
     app.get("/pendingRequestsHR", verifyToken, verifyHR, async (req, res) => {
       try {
         const query = { hrEmail: req.query.email, status: "pending" };
@@ -557,18 +592,18 @@ async function run() {
     });
 
     // getting a specific users request list
-    app.get("/filteredRequests",verifyToken, async (req, res) => {
+    app.get("/filteredRequests", verifyToken, async (req, res) => {
       try {
         const { search, requestStatus, assetType, email, hrEmail } = req.query;
         const query = {};
         console.log(email, hrEmail);
         if (hrEmail) {
-          query.hrEmail = hrEmail
+          query.hrEmail = hrEmail;
         }
         if (email) {
-          query.requesterEmail = email
+          query.requesterEmail = email;
         }
-        
+
         if (search) {
           query.name = { $regex: search, $options: "i" };
         }
@@ -589,7 +624,7 @@ async function run() {
         res.status(500).send({ error: "Failed to fetch filtered requests." });
       }
     });
-
+    // deletes specific request
     app.delete("/requests/:id", async (req, res) => {
       const query = { _id: new ObjectId(req.params.id) };
       const result = await requestCollection.deleteOne(query);
@@ -602,20 +637,139 @@ async function run() {
       res.send(result);
     });
 
-    // payment related apis
-    // app.post("/create-payment-intent", async (req, res) => {
-    //   const { price } = req.body;
-    //   const amount = parseInt(price * 100);
-    //   console.log(price, amount);
-    //   const paymentIntent = await stripe.paymentIntents.create({
-    //     amount: amount,
-    //     currency: "usd",
-    //     payment_method_types: ["card"],
-    //   });
-    //   res.send({ clientSecret: paymentIntent.client_secret });
-    // });
+    // homepage stats
+    app.get("/hrStatistics", verifyToken, verifyHR, async (req, res) => {
+      try {
+        const { email } = req.query;
 
-    // testing
+        // Fetch all employees under the given HR
+        const userQuery = { hrEmail: email };
+        const users = await userCollection.find(userQuery).toArray();
+
+        // Aggregate request statuses (approved, pending, rejected)
+        const requestQuery = { hrEmail: email };
+        const requestStatuses = await requestCollection
+          .aggregate([
+            { $match: requestQuery },
+            {
+              $group: {
+                _id: "$status",
+                count: { $sum: 1 },
+              },
+            },
+          ])
+          .toArray();
+
+        // Map statuses for easier client-side rendering
+        const statusCounts = {
+          approved: 0,
+          pending: 0,
+          rejected: 0,
+        };
+
+        requestStatuses.forEach((status) => {
+          statusCounts[status._id] = status.count;
+        });
+
+        res.send({ users, statusCounts });
+      } catch (error) {
+        console.error("Error fetching HR statistics:", error);
+        res.status(500).send("Error fetching HR statistics");
+      }
+    });
+
+    // hr: request per user
+    app.get("/requestsPerEmployee", verifyToken, verifyHR, async (req, res) => {
+      try {
+        const { email } = req.query;
+        console.log(email);
+        const employees = await userCollection
+          .find({ hrEmail: email, role: "employee" })
+          .toArray();
+        const employeeEmails = employees.map((emp) => emp.email);
+        const pipeline = [
+          { $match: { requesterEmail: { $in: employeeEmails } } },
+          {
+            $group: {
+              _id: "$requesterEmail",
+              requestCount: { $sum: 1 },
+            },
+          },
+          {
+            $sort: { requestCount: -1 },
+          },
+        ];
+        const result = await requestCollection
+          .aggregate(pipeline)
+          .limit(10)
+          .toArray();
+        console.log(result);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send("Error fetching requests per employee");
+      }
+    });
+
+    // homepage employee pending req
+    app.get("/pendingRequest", verifyToken, async (req, res) => {
+      const { email } = req.query; // Extract email from query params
+      const query = { requesterEmail: email, status: "pending" };
+      const result = await requestCollection.find(query).toArray();
+      res.send(result);
+    });
+    // employee monthly req
+
+    app.get(
+      "/employeeMonthlyRequests/:email",
+      verifyToken,
+      async (req, res) => {
+        try {
+          const { email } = req.params;
+
+          // Get the start and end of the current month
+          const startOfMonth = moment().startOf("month").toDate();
+          const endOfMonth = moment().endOf("month").toDate();
+          console.log("Start of month:", startOfMonth);
+          console.log("End of month:", endOfMonth);
+
+          // Query to fetch requests for the current month, filtering by requesterEmail
+          const query = {
+            requesterEmail: email,
+            requestDate: {
+              $gte: startOfMonth,
+              $lte: endOfMonth,
+            },
+          };
+
+          console.log("Query:", query);
+
+          // Fetch requests from the database
+          const result = await requestCollection.find(query).toArray();
+          console.log("Result:", result);
+
+          if (result.length === 0) {
+            return res
+              .status(404)
+              .send({ message: "No requests found for this month." });
+          }
+
+          // Return sorted requests by date (latest first)
+          const sortedRequests = result.sort(
+            (a, b) => new Date(b.requestDate) - new Date(a.requestDate)
+          );
+
+          // Send the sorted requests as the response
+          res.send(sortedRequests);
+        } catch (err) {
+          console.error(err);
+          res
+            .status(500)
+            .send({ error: "Something went wrong while fetching data" });
+        }
+      }
+    );
+
+    // payment related apis
     app.post("/create-payment-intent", async (req, res) => {
       const { price } = req.body;
       // console.log(price);
