@@ -80,7 +80,7 @@ async function run() {
     };
     // get all unemployed users
     app.get("/users/:email", async (req, res) => {
-      console.log(req.params.email);
+      // console.log(req.params.email);
       const unemployedUsers = await userCollection
         .find({ company: null, role: "employee" })
         .toArray();
@@ -135,7 +135,7 @@ async function run() {
 
     app.get("/users/roles/:email", async (req, res) => {
       const email = req.params.email;
-      console.log(email);
+      // console.log(email);
       const query = { email: email };
 
       try {
@@ -150,7 +150,7 @@ async function run() {
 
         res.send({ isHR: false, isEmployee: false, user: null });
       } catch (error) {
-        console.error("Error fetching user roles:", error);
+        // console.error("Error fetching user roles:", error);
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
@@ -204,7 +204,7 @@ async function run() {
         // If no hrEmail match, send an empty response
         res.send([]);
       } catch (error) {
-        console.error("Error fetching assets:", error);
+        // console.error("Error fetching assets:", error);
         res.status(500).send({ error: "Failed to fetch assets" });
       }
     });
@@ -255,7 +255,7 @@ async function run() {
         // If no hrEmail match, send an empty response
         res.send([]);
       } catch (error) {
-        console.error("Error fetching assets:", error);
+        // console.error("Error fetching assets:", error);
         res.status(500).send({ error: "Failed to fetch assets" });
       }
     });
@@ -327,7 +327,7 @@ async function run() {
 
     app.patch("/assets", verifyToken, verifyHR, async (req, res) => {
       try {
-        const filter = { name: req.body.name };
+        const filter = { name: req.body.name, hrEmail: req.body.hrEmail };
         const options = { upsert: true };
         const existingDoc = await assetCollection.findOne(filter);
         let currentQuantity = parseInt(existingDoc?.quantity || 0);
@@ -359,7 +359,7 @@ async function run() {
         );
         res.send(result);
       } catch (error) {
-        console.error("Error updating asset:", error);
+        // console.error("Error updating asset:", error);
         res.status(500).send({ error: "Failed to update the asset." });
       }
     });
@@ -390,17 +390,53 @@ async function run() {
       res.send(result);
     });
 
-    // request returned
-    app.patch("/requestReturned", verifyToken, async (req, res) => {
-      const { requestId } = req.body;
-      const filter = { _id: new ObjectId(requestId) };
-      const updateDoc = {
-        $set: {
-          status: "returned",
-        },
-      };
-      const result = await requestCollection.updateOne(filter, updateDoc);
-      res.send(result);
+    // hr pending returns
+    // app.get("/pendingRequestsHR", verifyToken, verifyHR, async (req, res) => {
+    //   const query = {hrEmail: req.query.email, status: "pending" };
+    //   const result = await requestCollection.find(query).toArray();
+    //   res.send(result);
+    // });
+    app.get("/pendingRequestsHR", verifyToken, verifyHR, async (req, res) => {
+      try {
+        const query = { hrEmail: req.query.email, status: "pending" };
+
+        // Limit the number of pending requests to 5
+        const result = await requestCollection.find(query).limit(5).toArray();
+
+        res.send(result);
+      } catch (err) {
+        console.error("Error fetching pending requests:", err);
+        res.status(500).send("Server Error");
+      }
+    });
+
+    //hr:  top most requested items
+    app.get("/topRequestedItems", verifyToken, verifyHR, async (req, res) => {
+      try {
+        const { hrEmail } = req.query; // Get hrEmail from query parameters
+
+        // Step 1: Filter requests by hrEmail
+        const filteredRequests = await requestCollection
+          .find({ hrEmail })
+          .toArray();
+
+        // Step 2: Count the number of requests for each item
+        const itemRequestCounts = filteredRequests.reduce((acc, request) => {
+          acc[request.name] = (acc[request.name] || 0) + 1; // Count the requests
+          return acc;
+        }, {});
+
+        // Step 3: Sort items by their request count in descending order
+        const sortedItems = Object.entries(itemRequestCounts)
+          .sort((a, b) => b[1] - a[1]) // Sort by request count in descending order
+          .slice(0, 4); // Get top 4 items
+
+        // Step 4: Send the response
+        res.send(sortedItems.map(([name, count]) => ({ name, count })));
+      } catch (error) {
+        console.error("Error fetching top requested items:", error);
+        res.status(500).send({ error: "Failed to fetch top requested items" });
+      }
     });
 
     app.post("/requests", verifyToken, async (req, res) => {
@@ -426,12 +462,23 @@ async function run() {
         res.status(500).json({ error: "Failed to handle the request" });
       }
     });
+    // request returned
+    app.patch("/requestReturned", verifyToken, async (req, res) => {
+      const { requestId } = req.body;
+      const filter = { _id: new ObjectId(requestId) };
+      const updateDoc = {
+        $set: {
+          status: "returned",
+        },
+      };
+      const result = await requestCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
 
-    // admin faces
-
-    app.get("/allRequests", verifyToken, verifyHR, async (req, res) => {
+    // HR fetches
+    app.get("/allRequestsHR", verifyToken, verifyHR, async (req, res) => {
       try {
-        const { search } = req.query;
+        const { search, email } = req.query;
         const query = {};
 
         if (search) {
@@ -440,14 +487,19 @@ async function run() {
             { requesterEmail: { $regex: search, $options: "i" } },
           ];
         }
+        if (email) {
+          // query = {hrEmail: email}
+          query.hrEmail = email;
+        }
 
         const result = await requestCollection.find(query).toArray();
         res.send(result);
       } catch (error) {
-        console.error("Error fetching requests:", error);
+        // console.error("Error fetching requests:", error);
         res.status(500).send({ error: "Failed to fetch requests" });
       }
     });
+    //
 
     // Approve a request
     app.patch("/requests/approve/:id", async (req, res) => {
@@ -504,11 +556,19 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/filteredRequests", async (req, res) => {
+    // getting a specific users request list
+    app.get("/filteredRequests",verifyToken, async (req, res) => {
       try {
-        const { search, requestStatus, assetType } = req.query;
+        const { search, requestStatus, assetType, email, hrEmail } = req.query;
         const query = {};
-
+        console.log(email, hrEmail);
+        if (hrEmail) {
+          query.hrEmail = hrEmail
+        }
+        if (email) {
+          query.requesterEmail = email
+        }
+        
         if (search) {
           query.name = { $regex: search, $options: "i" };
         }
@@ -525,7 +585,7 @@ async function run() {
 
         res.status(200).send(results);
       } catch (error) {
-        console.error("Error fetching filtered requests:", error);
+        // console.error("Error fetching filtered requests:", error);
         res.status(500).send({ error: "Failed to fetch filtered requests." });
       }
     });
@@ -558,13 +618,13 @@ async function run() {
     // testing
     app.post("/create-payment-intent", async (req, res) => {
       const { price } = req.body;
-      console.log(price);
+      // console.log(price);
       if (!price || isNaN(price)) {
         return res.status(400).send({ error: "Invalid price value." });
       }
 
       const amount = parseInt(price * 100); // Convert to cents
-      console.log("Price:", price, "Amount:", amount);
+      // console.log("Price:", price, "Amount:", amount);
 
       try {
         const paymentIntent = await stripe.paymentIntents.create({
@@ -574,7 +634,7 @@ async function run() {
         });
         res.send({ clientSecret: paymentIntent.client_secret });
       } catch (error) {
-        console.error("Error creating payment intent:", error);
+        // console.error("Error creating payment intent:", error);
         res.status(500).send({ error: error.message });
       }
     });
