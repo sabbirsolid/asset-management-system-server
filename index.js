@@ -341,6 +341,27 @@ async function run() {
       res.send(result);
     });
 
+    // add multiple users
+    app.patch("/multipleUsersAdd", async (req, res) => {
+      const { userIds, hrEmail, company, companyLogo } = req.body;
+      const updatePromises = userIds?.map((id) =>
+        userCollection.updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $set: {
+              hrEmail: hrEmail,
+              company: company,
+              companyLogo: companyLogo,
+            },
+          },
+          { upsert: true } 
+        )
+      );
+      const results = await Promise.all(updatePromises);
+
+      res.send(results);
+    });
+
     app.patch("/assets", verifyToken, verifyHR, async (req, res) => {
       try {
         const filter = { name: req.body.name, hrEmail: req.body.hrEmail };
