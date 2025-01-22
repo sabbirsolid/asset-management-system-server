@@ -32,10 +32,10 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
     const userCollection = client.db("assetManagementDB").collection("users");
     const assetCollection = client.db("assetManagementDB").collection("assets");
     const packageCollection = client
@@ -44,6 +44,9 @@ async function run() {
     const requestCollection = client
       .db("assetManagementDB")
       .collection("requests");
+    const noticeCollection = client
+      .db("assetManagementDB")
+      .collection("notices");
     // jwt api
     app.post("/jwt", async (req, res) => {
       const user = req.body;
@@ -166,45 +169,30 @@ async function run() {
           assetType,
           email,
         } = req.query;
-
-        // Find user info based on email
         const userInfo = await userCollection.findOne({ email: email });
         if (userInfo?.hrEmail) {
           const filter = {
             hrEmail: userInfo.hrEmail,
           };
-
-          // Search by name
           if (search) {
-            filter.name = { $regex: search, $options: "i" }; // Case-insensitive search
+            filter.name = { $regex: search, $options: "i" };
           }
-
-          // Filter by stock status
           if (stockStatus) {
             filter.quantity =
               stockStatus === "available" ? { $gt: 0 } : { $eq: 0 };
           }
-
-          // Filter by asset type
           if (assetType) {
             filter.type = assetType;
           }
-
-          // Sorting
           const sort = { [sortField]: sortOrder === "asc" ? 1 : -1 };
-
-          // Fetch filtered and sorted data
           const result = await assetCollection
             .find(filter)
             .sort(sort)
             .toArray();
           return res.send(result);
         }
-
-        // If no hrEmail match, send an empty response
         res.send([]);
       } catch (error) {
-        // console.error("Error fetching assets:", error);
         res.status(500).send({ error: "Failed to fetch assets" });
       }
     });
@@ -271,54 +259,10 @@ async function run() {
         const result = await assetCollection.find(query).limit(10).toArray();
         res.send(result);
       } catch (error) {
-        console.error("Error fetching low stock assets:", error);
         res.status(500).send("Error fetching low stock assets");
       }
     });
 
-    //app.get("/assets",verifyToken, async (req, res) => {
-    //       try {
-    //         const {
-    //           search = "",
-    //           sortField = "name",
-    //           sortOrder = "asc",
-    //           stockStatus,
-    //           assetType,
-    //           email
-    //         } = req.query;
-    // const userInfo = await userCollection.findOne({email: email})
-    // if(userInfo?.hrEmail){
-
-    // }
-    //         const filter = {};
-
-    //         // Search by name
-    //         if (search) {
-    //           filter.name = { $regex: search, $options: "i" }; // Case-insensitive search
-    //         }
-
-    //         // Filter by stock status
-    //         if (stockStatus) {
-    //           filter.quantity =
-    //             stockStatus === "available" ? { $gt: 0 } : { $eq: 0 };
-    //         }
-
-    //         // Filter by asset type
-    //         if (assetType) {
-    //           filter.type = assetType;
-    //         }
-
-    //         // Sorting
-    //         const sort = { [sortField]: sortOrder === "asc" ? 1 : -1 };
-
-    //         // Fetch filtered and sorted data
-    //         const result = await assetCollection.find(filter).sort(sort).toArray();
-    //         res.send(result);
-    //       } catch (error) {
-    //         console.error("Error fetching assets:", error);
-    //         res.status(500).send({ error: "Failed to fetch assets" });
-    //       }
-    //     });
     // posting data to database
     app.post("/users", async (req, res) => {
       const query = { email: req.body.email };
@@ -342,7 +286,7 @@ async function run() {
     });
 
     // add multiple users
-    app.patch("/multipleUsersAdd", async (req, res) => {
+    app.patch("/multipleUsersAdd", verifyToken, verifyHR, async (req, res) => {
       const { userIds, hrEmail, company, companyLogo } = req.body;
       const updatePromises = userIds?.map((id) =>
         userCollection.updateOne(
@@ -354,11 +298,10 @@ async function run() {
               companyLogo: companyLogo,
             },
           },
-          { upsert: true } 
+          { upsert: true }
         )
       );
       const results = await Promise.all(updatePromises);
-
       res.send(results);
     });
 
@@ -461,7 +404,7 @@ async function run() {
 
         res.send(result);
       } catch (err) {
-        console.error("Error fetching pending requests:", err);
+ 
         res.status(500).send("Server Error");
       }
     });
@@ -490,7 +433,6 @@ async function run() {
         // Step 4: Send the response
         res.send(sortedItems.map(([name, count]) => ({ name, count })));
       } catch (error) {
-        console.error("Error fetching top requested items:", error);
         res.status(500).send({ error: "Failed to fetch top requested items" });
       }
     });
@@ -503,19 +445,19 @@ async function run() {
         const asset = await assetCollection.findOne(query);
 
         if (!asset) {
-          return res.status(404).json({ error: "Asset not found" });
+          return res.status(404).send({ error: "Asset not found" });
         }
 
         if (asset.quantity < requestedQuantity) {
           return res
             .status(400)
-            .json({ error: "Insufficient quantity available" });
+            .send({ error: "Insufficient quantity available" });
         }
 
         const result = await requestCollection.insertOne(req.body);
         res.send(result);
       } catch (err) {
-        res.status(500).json({ error: "Failed to handle the request" });
+        res.status(500).send({ error: "Failed to handle the request" });
       }
     });
     // request returned
@@ -617,7 +559,6 @@ async function run() {
       try {
         const { search, requestStatus, assetType, email, hrEmail } = req.query;
         const query = {};
-        console.log(email, hrEmail);
         if (hrEmail) {
           query.hrEmail = hrEmail;
         }
@@ -694,7 +635,7 @@ async function run() {
 
         res.send({ users, statusCounts });
       } catch (error) {
-        console.error("Error fetching HR statistics:", error);
+    
         res.status(500).send("Error fetching HR statistics");
       }
     });
@@ -703,7 +644,7 @@ async function run() {
     app.get("/requestsPerEmployee", verifyToken, verifyHR, async (req, res) => {
       try {
         const { email } = req.query;
-        console.log(email);
+   
         const employees = await userCollection
           .find({ hrEmail: email, role: "employee" })
           .toArray();
@@ -724,7 +665,7 @@ async function run() {
           .aggregate(pipeline)
           .limit(10)
           .toArray();
-        console.log(result);
+
         res.send(result);
       } catch (error) {
         res.status(500).send("Error fetching requests per employee");
@@ -739,56 +680,71 @@ async function run() {
       res.send(result);
     });
     // employee monthly req
-
     app.get(
       "/employeeMonthlyRequests/:email",
       verifyToken,
       async (req, res) => {
-        try {
-          const { email } = req.params;
+        const { email } = req.params;
 
-          // Get the start and end of the current month
-          const startOfMonth = moment().startOf("month").toDate();
-          const endOfMonth = moment().endOf("month").toDate();
-          console.log("Start of month:", startOfMonth);
-          console.log("End of month:", endOfMonth);
+        const startOfMonth = moment().startOf("month").toDate();
+        const endOfMonth = moment().endOf("month").toDate();
+        const query = {
+          requesterEmail: email,
+          requestDate: {
+            $gte: startOfMonth.toISOString(),
+            $lte: endOfMonth.toISOString(),
+          },
+        };
 
-          // Query to fetch requests for the current month, filtering by requesterEmail
-          const query = {
-            requesterEmail: email,
-            requestDate: {
-              $gte: startOfMonth,
-              $lte: endOfMonth,
-            },
-          };
+        const result = await requestCollection.find(query).limit(8).toArray();
 
-          console.log("Query:", query);
-
-          // Fetch requests from the database
-          const result = await requestCollection.find(query).toArray();
-          console.log("Result:", result);
-
-          if (result.length === 0) {
-            return res
-              .status(404)
-              .send({ message: "No requests found for this month." });
-          }
-
-          // Return sorted requests by date (latest first)
-          const sortedRequests = result.sort(
-            (a, b) => new Date(b.requestDate) - new Date(a.requestDate)
-          );
-
-          // Send the sorted requests as the response
-          res.send(sortedRequests);
-        } catch (err) {
-          console.error(err);
-          res
-            .status(500)
-            .send({ error: "Something went wrong while fetching data" });
+        if (!result || result.length === 0) {
+          return res
+            .status(404)
+            .send({ message: "No requests found for this month." });
         }
+        const sortedRequests = result.sort(
+          (a, b) => new Date(b.requestDate) - new Date(a.requestDate)
+        );
+        res.send(sortedRequests);
       }
     );
+    // hr: add a notice
+    app.post("/addNotice", verifyToken, verifyHR, async (req, res) => {
+      const notice = req.body;
+      const result = await noticeCollection.insertOne(notice);
+      res.send(result);
+    });
+    // hr: get hr published notices
+    app.get("/addNotice/:email", verifyToken, verifyHR, async (req, res) => {
+      try {
+        const email = req.params.email;
+        const result = await noticeCollection
+          .find({ hrEmail: email })
+          .sort({ postedDate: -1 }) // Sort by `postedDate` in descending order (most recent first)
+          .limit(10) // Limit to the 10 most recent notices
+          .toArray();
+
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ error: "Failed to fetch notices" });
+      }
+    });
+    // employee: get all request
+    app.get("/addNoticeForEmployee/:email", verifyToken, async (req, res) => {
+      try {
+        const email = req.params.email;
+        const result = await noticeCollection
+          .find({ hrEmail: email })
+          .sort({ postedDate: -1 }) // Sort by `postedDate` in descending order (most recent first)
+          .limit(10) // Limit to the 10 most recent notices
+          .toArray();
+
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ error: "Failed to fetch notices" });
+      }
+    });
 
     // payment related apis
     app.post("/create-payment-intent", async (req, res) => {
