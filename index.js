@@ -798,6 +798,25 @@ async function run() {
       const result = await paymentCollection.insertOne(req.body);
       res.send(result);
     });
+    // getting payment history
+    app.get(
+      "/paymentHistory/:email",
+      verifyToken,
+      verifyHR,
+      async (req, res) => {
+        const email = req.params.email;
+        if (!req.decoded.email === email) {
+          return res.status(403).send({ message: "Forbidden Access" });
+        }
+        const query = { hrEmail: email };
+        const result = await paymentCollection
+          .find(query)
+          .limit(4)
+          .sort({ paymentTime: -1 })
+          .toArray();
+        res.send(result);
+      }
+    );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
