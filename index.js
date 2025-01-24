@@ -47,6 +47,9 @@ async function run() {
     const noticeCollection = client
       .db("assetManagementDB")
       .collection("notices");
+    const paymentCollection = client
+      .db("assetManagementDB")
+      .collection("payments");
     // jwt api
     app.post("/jwt", async (req, res) => {
       const user = req.body;
@@ -71,7 +74,7 @@ async function run() {
       });
     };
 
-    // use verify admin after verifyToken
+    // verify admin after verifyToken
     const verifyHR = async (req, res, next) => {
       const email = req.decoded.email;
       const query = { email: email };
@@ -82,8 +85,18 @@ async function run() {
       }
       next();
     };
+    const verifyEmployee = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      const isEmployee = user?.role === "employee";
+      if (!isEmployee) {
+        return res.status(403).send({ message: "forbidden" });
+      }
+      next();
+    };
     // get all unemployed users
-    app.get("/users/:email", async (req, res) => {
+    app.get("/users/:email", verifyToken, async (req, res) => {
       // console.log(req.params.email);
       const unemployedUsers = await userCollection
         .find({ company: null, role: "employee" })
@@ -96,7 +109,7 @@ async function run() {
     });
 
     // adding employee
-    app.patch("/usersAdd", async (req, res) => {
+    app.patch("/usersAdd", verifyToken, verifyHR, async (req, res) => {
       const { id, hrEmail, company, companyLogo } = req.body;
       const query = { _id: new ObjectId(id) };
       const updateDoc = {
@@ -110,7 +123,7 @@ async function run() {
       res.send(employee);
     });
     // removing employee
-    app.patch("/usersRemove/:id", async (req, res) => {
+    app.patch("/usersRemove/:id", verifyToken, verifyHR, async (req, res) => {
       const id = req.params;
       const query = { _id: new ObjectId(id) };
       const updateDoc = {
@@ -124,18 +137,23 @@ async function run() {
       res.send(employee);
     });
     // getting an employee team
-    app.get("/usersTeam/:email", async (req, res) => {
-      const query = { email: req.params.email };
-      const userInfo = await userCollection.findOne(query);
-      if (userInfo?.hrEmail) {
-        const team = await userCollection
-          .find({ hrEmail: userInfo.hrEmail })
-          .toArray();
-        res.send(team);
-      } else {
-        res.send([]);
+    app.get(
+      "/usersTeam/:email",
+      verifyToken,
+      verifyEmployee,
+      async (req, res) => {
+        const query = { email: req.params.email };
+        const userInfo = await userCollection.findOne(query);
+        if (userInfo?.hrEmail) {
+          const team = await userCollection
+            .find({ hrEmail: userInfo.hrEmail })
+            .toArray();
+          res.send(team);
+        } else {
+          res.send([]);
+        }
       }
-    });
+    );
     // getting user roles
     app.get("/users/roles/:email", async (req, res) => {
       const email = req.params.email;
@@ -404,7 +422,6 @@ async function run() {
 
         res.send(result);
       } catch (err) {
- 
         res.status(500).send("Server Error");
       }
     });
@@ -635,7 +652,6 @@ async function run() {
 
         res.send({ users, statusCounts });
       } catch (error) {
-    
         res.status(500).send("Error fetching HR statistics");
       }
     });
@@ -644,7 +660,7 @@ async function run() {
     app.get("/requestsPerEmployee", verifyToken, verifyHR, async (req, res) => {
       try {
         const { email } = req.query;
-   
+
         const employees = await userCollection
           .find({ hrEmail: email, role: "employee" })
           .toArray();
@@ -746,6 +762,14 @@ async function run() {
       }
     });
 
+    // hr: delete a notice
+    app.delete("/deleteNotice/:id", verifyToken, verifyHR, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await noticeCollection.deleteOne(query);
+      res.send(result);
+    });
+
     // payment related apis
     app.post("/create-payment-intent", async (req, res) => {
       const { price } = req.body;
@@ -768,6 +792,11 @@ async function run() {
         // console.error("Error creating payment intent:", error);
         res.status(500).send({ error: error.message });
       }
+    });
+    // save payment data
+    app.post("/payments", verifyToken, verifyHR, async (req, res) => {
+      const result = await paymentCollection.insertOne(req.body);
+      res.send(result);
     });
   } finally {
     // Ensures that the client will close when you finish/error
