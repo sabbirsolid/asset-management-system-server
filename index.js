@@ -95,6 +95,25 @@ async function run() {
       }
       next();
     };
+
+    // getting an employee team
+    app.get(
+      "/usersTeam/:email",
+      verifyToken,
+      verifyEmployee,
+      async (req, res) => {
+        const query = { email: req.params.email };
+        const userInfo = await userCollection.findOne(query);
+        if (userInfo?.hrEmail) {
+          const team = await userCollection
+            .find({ hrEmail: userInfo.hrEmail })
+            .toArray();
+          res.send(team);
+        } else {
+          res.send([]);
+        }
+      }
+    );
     // get all unemployed users
     app.get("/users/:email", verifyToken, async (req, res) => {
       // console.log(req.params.email);
@@ -106,6 +125,28 @@ async function run() {
         .find({ hrEmail: req.params.email })
         .toArray();
       res.send({ unemployedUsers, hrInfo, hrMembers });
+    });
+
+    // posting data to database
+    app.post("/users", async (req, res) => {
+      const query = { email: req.body.email };
+      const existingUser = await userCollection.findOne(query);
+      if (existingUser) {
+        return res.send("User already in the database");
+      }
+      const result = await userCollection.insertOne(req.body);
+      res.send(result);
+    });
+    // update user limit
+    app.patch("/users/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const newMember = parseInt(req.body.newMember);
+      const updateDoc = {
+        $inc: { employeeCount: newMember },
+      };
+      const result = await userCollection.updateOne(query, updateDoc);
+      res.send(result);
     });
 
     // adding employee
@@ -136,24 +177,7 @@ async function run() {
       const employee = await userCollection.updateOne(query, updateDoc);
       res.send(employee);
     });
-    // getting an employee team
-    app.get(
-      "/usersTeam/:email",
-      verifyToken,
-      verifyEmployee,
-      async (req, res) => {
-        const query = { email: req.params.email };
-        const userInfo = await userCollection.findOne(query);
-        if (userInfo?.hrEmail) {
-          const team = await userCollection
-            .find({ hrEmail: userInfo.hrEmail })
-            .toArray();
-          res.send(team);
-        } else {
-          res.send([]);
-        }
-      }
-    );
+
     // getting user roles
     app.get("/users/roles/:email", async (req, res) => {
       const email = req.params.email;
@@ -233,7 +257,7 @@ async function run() {
 
           // Search by name
           if (search) {
-            filter.name = { $regex: search, $options: "i" }; // Case-insensitive search
+            filter.name = { $regex: search, $options: "i" };
           }
 
           // Filter by stock status
@@ -265,68 +289,15 @@ async function run() {
         res.status(500).send({ error: "Failed to fetch assets" });
       }
     });
-
-    // getting low stock asset by specific hr
-    app.get("/assetLowStock", verifyToken, verifyHR, async (req, res) => {
-      try {
-        const { email } = req.query;
-        const query = {
-          hrEmail: email,
-          quantity: { $lt: 10 },
-        };
-        const result = await assetCollection.find(query).limit(10).toArray();
-        res.send(result);
-      } catch (error) {
-        res.status(500).send("Error fetching low stock assets");
-      }
-    });
-
-    // posting data to database
-    app.post("/users", async (req, res) => {
-      const query = { email: req.body.email };
-      const existingUser = await userCollection.findOne(query);
-      if (existingUser) {
-        return res.send("User already in the database");
-      }
-      const result = await userCollection.insertOne(req.body);
-      res.send(result);
-    });
-    // update user limit
-    app.patch("/users/:email", async (req, res) => {
-      const email = req.params.email;
-      const query = { email: email };
-      const newMember = parseInt(req.body.newMember);
-      const updateDoc = {
-        $inc: { employeeCount: newMember },
-      };
-      const result = await userCollection.updateOne(query, updateDoc);
-      res.send(result);
-    });
-
-    // add multiple users
-    app.patch("/multipleUsersAdd", verifyToken, verifyHR, async (req, res) => {
-      const { userIds, hrEmail, company, companyLogo } = req.body;
-      const updatePromises = userIds?.map((id) =>
-        userCollection.updateOne(
-          { _id: new ObjectId(id) },
-          {
-            $set: {
-              hrEmail: hrEmail,
-              company: company,
-              companyLogo: companyLogo,
-            },
-          },
-          { upsert: true }
-        )
-      );
-      const results = await Promise.all(updatePromises);
-      res.send(results);
-    });
-
+    // add an asset
     app.patch("/assets", verifyToken, verifyHR, async (req, res) => {
       try {
-        const filter = { name: req.body.name, hrEmail: req.body.hrEmail };
-        const options = { upsert: true };
+        // const filter = { name: req.body.name, hrEmail: req.body.hrEmail };
+        const filter = {
+          name: { $regex: `^${req.body.name}$`, $options: "i" },
+          hrEmail: { $regex: `^${req.body.hrEmail}$`, $options: "i" },
+        };
+        const options = { upsert: true, collation: undefined };
         const existingDoc = await assetCollection.findOne(filter);
         let currentQuantity = parseInt(existingDoc?.quantity || 0);
         if (isNaN(currentQuantity)) {
@@ -357,7 +328,6 @@ async function run() {
         );
         res.send(result);
       } catch (error) {
-        // console.error("Error updating asset:", error);
         res.status(500).send({ error: "Failed to update the asset." });
       }
     });
@@ -411,6 +381,41 @@ async function run() {
         _id: new ObjectId(req.params.id),
       });
       res.send(result);
+    });
+
+    // getting low stock asset by specific hr
+    app.get("/assetLowStock", verifyToken, verifyHR, async (req, res) => {
+      try {
+        const { email } = req.query;
+        const query = {
+          hrEmail: email,
+          quantity: { $lt: 10 },
+        };
+        const result = await assetCollection.find(query).limit(10).toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send("Error fetching low stock assets");
+      }
+    });
+
+    // add multiple users
+    app.patch("/multipleUsersAdd", verifyToken, verifyHR, async (req, res) => {
+      const { userIds, hrEmail, company, companyLogo } = req.body;
+      const updatePromises = userIds?.map((id) =>
+        userCollection.updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $set: {
+              hrEmail: hrEmail,
+              company: company,
+              companyLogo: companyLogo,
+            },
+          },
+          { upsert: true }
+        )
+      );
+      const results = await Promise.all(updatePromises);
+      res.send(results);
     });
 
     app.get("/pendingRequestsHR", verifyToken, verifyHR, async (req, res) => {
@@ -794,7 +799,7 @@ async function run() {
       }
     });
     // save payment data
-    app.post("/payments", verifyToken, verifyHR, async (req, res) => {
+    app.post("/payments", async (req, res) => {
       const result = await paymentCollection.insertOne(req.body);
       res.send(result);
     });
