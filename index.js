@@ -314,6 +314,7 @@ async function run() {
         }
         const updateDoc = {
           $set: {
+            name: req.body.name,
             type: req.body.type,
             quantity: newQuantity,
             addedDate: new Date(),
@@ -335,6 +336,7 @@ async function run() {
     // decreasing assets quantity
     app.patch("/assetDecrease", verifyToken, verifyHR, async (req, res) => {
       const { assetId, requestedQuantity } = req.body;
+      console.log(assetId, requestedQuantity);
       const filter = { _id: new ObjectId(assetId) };
       const updateDoc = {
         $inc: {
@@ -348,6 +350,8 @@ async function run() {
     // increase assets quantity implementing return function
     app.patch("/assetReturn", verifyToken, async (req, res) => {
       const { assetId, requestedQuantity } = req.body;
+      console.log(assetId, requestedQuantity);
+      // const filter = { _id: new ObjectId(assetId) };
       const filter = { _id: new ObjectId(assetId) };
       const updateDoc = {
         $inc: {
