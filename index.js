@@ -243,8 +243,7 @@ async function run() {
       try {
         const {
           search = "",
-          sortField = "name",
-          sortOrder = "asc",
+          sortOrder ,
           stockStatus,
           assetType,
           email,
@@ -272,7 +271,7 @@ async function run() {
           }
 
           // Sorting
-          const sort = { [sortField]: sortOrder === "asc" ? 1 : -1 };
+          const sort = { ["quantity"]: sortOrder === "asc" ? 1 : -1 };
 
           // Fetch filtered and sorted data
           const result = await assetCollection
@@ -335,33 +334,42 @@ async function run() {
 
     // decreasing assets quantity
     app.patch("/assetDecrease", verifyToken, verifyHR, async (req, res) => {
-      const { assetId, requestedQuantity } = req.body;
-      console.log(assetId, requestedQuantity);
-      const filter = { _id: new ObjectId(assetId) };
-      const updateDoc = {
-        $inc: {
-          quantity: -parseInt(requestedQuantity),
-        },
-      };
-      const result = await assetCollection.updateOne(filter, updateDoc);
-      res.send(result);
+      try {
+        const { assetId, requestedQuantity } = req.body;
+
+        if (isNaN(requestedQuantity)) {
+          return res.status(400).send({ error: "Invalid requestedQuantity" });
+        }
+
+        const filter = { _id: new ObjectId(assetId) };
+        const asset = await assetCollection.findOne(filter);
+        const updateDoc = {
+          $set: {
+            quantity: parseInt(asset.quantity) - parseInt(requestedQuantity),
+          },
+        };
+
+        const result = await assetCollection.updateOne(filter, updateDoc);
+        res.send(result);
+      } catch (error) {
+        // console.error("Error decreasing asset quantity:", error);
+        res.status(500).send({ error: "Failed to decrease asset quantity" });
+      }
     });
 
     // increase assets quantity implementing return function
     app.patch("/assetReturn", verifyToken, async (req, res) => {
       const { assetId, requestedQuantity } = req.body;
-      console.log(assetId, requestedQuantity);
-      // const filter = { _id: new ObjectId(assetId) };
       const filter = { _id: new ObjectId(assetId) };
+      const asset = await assetCollection.findOne(filter);
       const updateDoc = {
-        $inc: {
-          quantity: parseInt(requestedQuantity),
+        $set: {
+          quantity: parseInt(asset.quantity) + parseInt(requestedQuantity),
         },
       };
       const result = await assetCollection.updateOne(filter, updateDoc);
       res.send(result);
     });
-
     // hr: update an asset
     app.patch("/assetUpdate/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
@@ -721,7 +729,7 @@ async function run() {
           },
         };
 
-        const result = await requestCollection.find(query).limit(8).toArray();
+        const result = await requestCollection.find(query).limit(5).toArray();
 
         if (!result || result.length === 0) {
           return res
