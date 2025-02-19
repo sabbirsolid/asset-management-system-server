@@ -243,7 +243,7 @@ async function run() {
       try {
         const {
           search = "",
-          sortOrder ,
+          sortOrder,
           stockStatus,
           assetType,
           email,
@@ -589,37 +589,78 @@ async function run() {
     });
 
     // getting a specific users request list
+    // app.get("/filteredRequests", verifyToken, async (req, res) => {
+    //   try {
+    //     const { search, requestStatus, assetType, email, hrEmail } = req.query;
+    //     const query = {};
+    //     if (hrEmail) {
+    //       query.hrEmail = hrEmail;
+    //     }
+    //     if (email) {
+    //       query.requesterEmail = email;
+    //     }
+
+    //     if (search) {
+    //       query.name = { $regex: search, $options: "i" };
+    //     }
+
+    //     if (requestStatus) {
+    //       query.status = requestStatus;
+    //     }
+
+    //     if (assetType) {
+    //       query.type = assetType;
+    //     }
+
+    //     const results = await requestCollection.find(query).toArray();
+
+    //     res.status(200).send(results);
+    //   } catch (error) {
+    //     // console.error("Error fetching filtered requests:", error);
+    //     res.status(500).send({ error: "Failed to fetch filtered requests." });
+    //   }
+    // });
+
+
     app.get("/filteredRequests", verifyToken, async (req, res) => {
       try {
-        const { search, requestStatus, assetType, email, hrEmail } = req.query;
+        const { search, requestStatus, assetType, email, hrEmail, sortField, sortOrder } = req.query;
         const query = {};
+    
         if (hrEmail) {
           query.hrEmail = hrEmail;
         }
         if (email) {
           query.requesterEmail = email;
         }
-
+    
         if (search) {
           query.name = { $regex: search, $options: "i" };
         }
-
+    
         if (requestStatus) {
           query.status = requestStatus;
         }
-
+    
         if (assetType) {
           query.type = assetType;
         }
-
-        const results = await requestCollection.find(query).toArray();
-
+    
+        let sortQuery = {};
+        if (sortField && sortOrder) {
+          sortQuery[sortField] = sortOrder === "asc" ? 1 : -1;
+        }
+    
+        const results = await requestCollection.find(query).sort(sortQuery).toArray();
+    
         res.status(200).send(results);
       } catch (error) {
-        // console.error("Error fetching filtered requests:", error);
+        console.error("Error fetching filtered requests:", error);
         res.status(500).send({ error: "Failed to fetch filtered requests." });
       }
     });
+   
+    
     // deletes specific request
     app.delete("/requests/:id", async (req, res) => {
       const query = { _id: new ObjectId(req.params.id) };
@@ -710,6 +751,15 @@ async function run() {
       const { email } = req.query; // Extract email from query params
       const query = { requesterEmail: email, status: "pending" };
       const result = await requestCollection.find(query).toArray();
+      res.send(result);
+    });
+    // returned items for history
+    app.get("/returnedRequest", verifyToken, async (req, res) => {
+      const { email } = req.query;
+      console.log(email);
+      const query = { requesterEmail: email, status: "returned" };
+      const result = await requestCollection.find(query).limit(4).toArray();
+      console.log(result);
       res.send(result);
     });
     // employee monthly req
