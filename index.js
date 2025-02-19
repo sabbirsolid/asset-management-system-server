@@ -524,7 +524,6 @@ async function run() {
         const result = await requestCollection.find(query).toArray();
         res.send(result);
       } catch (error) {
-        // console.error("Error fetching requests:", error);
         res.status(500).send({ error: "Failed to fetch requests" });
       }
     });
@@ -794,13 +793,12 @@ async function run() {
     // payment related apis
     app.post("/create-payment-intent", async (req, res) => {
       const { price } = req.body;
-      // console.log(price);
+
       if (!price || isNaN(price)) {
         return res.status(400).send({ error: "Invalid price value." });
       }
 
       const amount = parseInt(price * 100); // Convert to cents
-      // console.log("Price:", price, "Amount:", amount);
 
       try {
         const paymentIntent = await stripe.paymentIntents.create({
