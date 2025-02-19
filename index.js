@@ -589,76 +589,39 @@ async function run() {
     });
 
     // getting a specific users request list
-    // app.get("/filteredRequests", verifyToken, async (req, res) => {
-    //   try {
-    //     const { search, requestStatus, assetType, email, hrEmail } = req.query;
-    //     const query = {};
-    //     if (hrEmail) {
-    //       query.hrEmail = hrEmail;
-    //     }
-    //     if (email) {
-    //       query.requesterEmail = email;
-    //     }
-
-    //     if (search) {
-    //       query.name = { $regex: search, $options: "i" };
-    //     }
-
-    //     if (requestStatus) {
-    //       query.status = requestStatus;
-    //     }
-
-    //     if (assetType) {
-    //       query.type = assetType;
-    //     }
-
-    //     const results = await requestCollection.find(query).toArray();
-
-    //     res.status(200).send(results);
-    //   } catch (error) {
-    //     // console.error("Error fetching filtered requests:", error);
-    //     res.status(500).send({ error: "Failed to fetch filtered requests." });
-    //   }
-    // });
-
-
     app.get("/filteredRequests", verifyToken, async (req, res) => {
       try {
-        const { search, requestStatus, assetType, email, hrEmail, sortField, sortOrder } = req.query;
+        const { search, requestStatus, assetType, email, hrEmail } = req.query;
         const query = {};
-    
         if (hrEmail) {
           query.hrEmail = hrEmail;
         }
         if (email) {
           query.requesterEmail = email;
         }
-    
+
         if (search) {
           query.name = { $regex: search, $options: "i" };
         }
-    
+
         if (requestStatus) {
           query.status = requestStatus;
         }
-    
+
         if (assetType) {
           query.type = assetType;
         }
-    
-        let sortQuery = {};
-        if (sortField && sortOrder) {
-          sortQuery[sortField] = sortOrder === "asc" ? 1 : -1;
-        }
-    
-        const results = await requestCollection.find(query).sort(sortQuery).toArray();
-    
+
+        const results = await requestCollection.find(query).toArray();
+
         res.status(200).send(results);
       } catch (error) {
-        console.error("Error fetching filtered requests:", error);
+        // console.error("Error fetching filtered requests:", error);
         res.status(500).send({ error: "Failed to fetch filtered requests." });
       }
     });
+
+
    
     
     // deletes specific request
