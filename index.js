@@ -621,9 +621,6 @@ async function run() {
       }
     });
 
-
-   
-    
     // deletes specific request
     app.delete("/requests/:id", async (req, res) => {
       const query = { _id: new ObjectId(req.params.id) };
@@ -659,8 +656,6 @@ async function run() {
             },
           ])
           .toArray();
-
-        // Map statuses for easier client-side rendering
         const statusCounts = {
           approved: 0,
           pending: 0,
@@ -677,7 +672,6 @@ async function run() {
       }
     });
 
-    // hr: request per user
     app.get("/requestsPerEmployee", verifyToken, verifyHR, async (req, res) => {
       try {
         const { email } = req.query;
@@ -719,13 +713,13 @@ async function run() {
     // returned items for history
     app.get("/returnedRequest", verifyToken, async (req, res) => {
       const { email } = req.query;
-    
+
       const query = { requesterEmail: email, status: "returned" };
       const result = await requestCollection.find(query).limit(4).toArray();
-   
+
       res.send(result);
     });
-   
+
     app.get(
       "/employeeMonthlyRequests/:email",
       verifyToken,
