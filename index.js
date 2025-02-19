@@ -181,7 +181,6 @@ async function run() {
     // getting user roles
     app.get("/users/roles/:email", async (req, res) => {
       const email = req.params.email;
-      // console.log(email);
       const query = { email: email };
 
       try {
@@ -196,7 +195,6 @@ async function run() {
 
         res.send({ isHR: false, isEmployee: false, user: null });
       } catch (error) {
-        // console.error("Error fetching user roles:", error);
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
@@ -352,7 +350,6 @@ async function run() {
         const result = await assetCollection.updateOne(filter, updateDoc);
         res.send(result);
       } catch (error) {
-        // console.error("Error decreasing asset quantity:", error);
         res.status(500).send({ error: "Failed to decrease asset quantity" });
       }
     });
