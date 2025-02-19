@@ -719,10 +719,10 @@ async function run() {
     // returned items for history
     app.get("/returnedRequest", verifyToken, async (req, res) => {
       const { email } = req.query;
-      console.log(email);
+    
       const query = { requesterEmail: email, status: "returned" };
       const result = await requestCollection.find(query).limit(4).toArray();
-      console.log(result);
+   
       res.send(result);
     });
     // employee monthly req
